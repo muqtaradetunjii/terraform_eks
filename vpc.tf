@@ -5,6 +5,6 @@ resource "aws_vpc" "main" {
 
   tags = {
     Name = "terraform-eks-vpc"
-    Environment = var.vpc_environment
+    Environment = var.environment
   }
 }

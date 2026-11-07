@@ -1,18 +1,65 @@
-module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
+resource "aws_eks_cluster" "main" {
+  name     = var.cluster_name
+  role_arn = aws_iam_role.eks_cluster.arn
 
-  name = "my-vpc"
-  cidr = "10.0.0.0/16"
+  access_config {
+    authentication_mode                         = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin_permissions = true
+  }
 
-  azs             = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+   vpc_config {
+    subnet_ids = [
+      aws_subnet.public_subnet_1.id,
+      aws_subnet.public_subnet_2.id,
+      aws_subnet.private_subnet_1.id,
+      aws_subnet.private_subnet_2.id
+    ]
 
-  enable_nat_gateway = true
-  enable_vpn_gateway = true
+    endpoint_private_access      = true
+    endpoint_public_access       = true
+    public_access_cidrs          = var.cluster_endpoint_public_access_cidrs
+  }
 
   tags = {
-    Terraform = "true"
-    Environment = "dev"
+    Environment = var.environment
   }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_policy
+  ]
+}
+
+resource "aws_eks_node_group" "main" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "${var.cluster_name}-nodes"
+  node_role_arn   = aws_iam_role.eks_node.arn
+
+  subnet_ids = [
+    aws_subnet.public_subnet_1.id,
+    aws_subnet.public_subnet_2.id
+  ]
+
+ instance_types = var.node_instance_types
+  capacity_type  = "ON_DEMAND"
+  disk_size      = 20
+
+  scaling_config {
+    desired_size = var.node_desired_size
+    min_size     = 1
+    max_size     = 2
+  }
+
+  update_config {
+    max_unavailable = 1
+  }
+
+  tags = {
+    Environment = var.environment
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_worker_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.eks_ecr_policy
+  ]
 }
